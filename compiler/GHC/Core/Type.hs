@@ -490,7 +490,7 @@ expand_syn tvs rhs arg_tys
   | otherwise     = go empty_subst tvs arg_tys
   where
     empty_subst = mkEmptyTCvSubst in_scope
-    in_scope = mkInScopeSet $ shallowTyCoVarsOfTypes $ arg_tys
+    in_scope = shallowTyCoVarsOfTypesInScope $ arg_tys
       -- The free vars of 'rhs' should all be bound by 'tenv',
       -- so we only need the free vars of tys
       -- See also Note [The substitution invariant] in GHC.Core.TyCo.Subst.

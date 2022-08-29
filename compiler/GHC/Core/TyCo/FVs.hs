@@ -1,7 +1,7 @@
 
 
 module GHC.Core.TyCo.FVs
-  (     shallowTyCoVarsOfType, shallowTyCoVarsOfTypes,
+  (     shallowTyCoVarsOfType, shallowTyCoVarsOfTypes, shallowTyCoVarsOfTypesInScope,
         tyCoVarsOfType,        tyCoVarsOfTypes,
         tyCoVarsOfTypeDSet, tyCoVarsOfTypesDSet,
 
@@ -12,7 +12,7 @@ module GHC.Core.TyCo.FVs
 
         shallowTyCoVarsOfTyVarEnv, shallowTyCoVarsOfCoVarEnv,
 
-        shallowTyCoVarsOfCo, shallowTyCoVarsOfCos,
+        shallowTyCoVarsOfCo, shallowTyCoVarsOfCos, shallowTyCoVarsOfCosInScope,
         tyCoVarsOfCo, tyCoVarsOfCos, tyCoVarsOfMCo,
         coVarsOfType, coVarsOfTypes,
         coVarsOfCo, coVarsOfCos,
@@ -331,11 +331,17 @@ shallowTyCoVarsOfType ty = runTyCoVars (shallow_ty ty)
 shallowTyCoVarsOfTypes :: [Type] -> TyCoVarSet
 shallowTyCoVarsOfTypes tys = runTyCoVars (shallow_tys tys)
 
+shallowTyCoVarsOfTypesInScope :: [Type] -> InScopeSet
+shallowTyCoVarsOfTypesInScope tys = appEndo (shallow_tys_in_scope tys) emptyInScopeSet
+
 shallowTyCoVarsOfCo :: Coercion -> TyCoVarSet
 shallowTyCoVarsOfCo co = runTyCoVars (shallow_co co)
 
 shallowTyCoVarsOfCos :: [Coercion] -> TyCoVarSet
 shallowTyCoVarsOfCos cos = runTyCoVars (shallow_cos cos)
+
+shallowTyCoVarsOfCosInScope :: [Coercion] -> InScopeSet
+shallowTyCoVarsOfCosInScope cos = appEndo (shallow_cos_in_scope cos) emptyInScopeSet
 
 -- | Returns free variables of types, including kind variables as
 -- a non-deterministic set. For type synonyms it does /not/ expand the
@@ -357,6 +363,11 @@ shallow_co  :: Coercion   -> Endo TyCoVarSet
 shallow_cos :: [Coercion] -> Endo TyCoVarSet
 (shallow_ty, shallow_tys, shallow_co, shallow_cos) = foldTyCo shallowTcvFolder emptyVarSet
 
+shallow_tys_in_scope :: [Type]     -> Endo InScopeSet
+shallow_cos_in_scope :: [Coercion] -> Endo InScopeSet
+(_, shallow_tys_in_scope, _, shallow_cos_in_scope)
+  = foldTyCo shallowTcvFolderInScope emptyVarSet
+
 shallowTcvFolder :: TyCoFolder TyCoVarSet (Endo TyCoVarSet)
 shallowTcvFolder = TyCoFolder { tcf_view = noView
                               , tcf_tyvar = do_tcv, tcf_covar = do_tcv
@@ -367,6 +378,20 @@ shallowTcvFolder = TyCoFolder { tcf_view = noView
         do_it acc | v `elemVarSet` is  = acc
                   | v `elemVarSet` acc = acc
                   | otherwise          = acc `extendVarSet` v
+
+    do_bndr is tcv _ = extendVarSet is tcv
+    do_hole _ _  = mempty   -- Ignore coercion holes
+
+shallowTcvFolderInScope :: TyCoFolder TyCoVarSet (Endo InScopeSet)
+shallowTcvFolderInScope = TyCoFolder { tcf_view = noView
+                                     , tcf_tyvar = do_tcv, tcf_covar = do_tcv
+                                     , tcf_hole  = do_hole, tcf_tycobinder = do_bndr }
+  where
+    do_tcv is v = Endo do_it
+      where
+        do_it acc | v `elemVarSet` is      = acc
+                  | v `elemInScopeSet` acc = acc
+                  | otherwise              = acc `extendInScopeSet` v
 
     do_bndr is tcv _ = extendVarSet is tcv
     do_hole _ _  = mempty   -- Ignore coercion holes

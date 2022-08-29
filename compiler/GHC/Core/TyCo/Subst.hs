@@ -418,7 +418,7 @@ unionTCvSubst (TCvSubst in_scope1 tenv1 cenv1) (TCvSubst in_scope2 tenv2 cenv2)
 -- environment. No CoVars, please!
 zipTvSubst :: HasDebugCallStack => [TyVar] -> [Type] -> TCvSubst
 zipTvSubst tvs tys
-  = mkTvSubst (mkInScopeSet (shallowTyCoVarsOfTypes tys)) tenv
+  = mkTvSubst (shallowTyCoVarsOfTypesInScope tys) tenv
   where
     tenv = zipTyEnv tvs tys
 
@@ -426,14 +426,14 @@ zipTvSubst tvs tys
 -- environment.  No TyVars, please!
 zipCvSubst :: HasDebugCallStack => [CoVar] -> [Coercion] -> TCvSubst
 zipCvSubst cvs cos
-  = TCvSubst (mkInScopeSet (shallowTyCoVarsOfCos cos)) emptyTvSubstEnv cenv
+  = TCvSubst (shallowTyCoVarsOfCosInScope cos) emptyTvSubstEnv cenv
   where
     cenv = zipCoEnv cvs cos
 
 zipTCvSubst :: HasDebugCallStack => [TyCoVar] -> [Type] -> TCvSubst
 zipTCvSubst tcvs tys
   = zip_tcvsubst tcvs tys $
-    mkEmptyTCvSubst $ mkInScopeSet $ shallowTyCoVarsOfTypes tys
+    mkEmptyTCvSubst $ shallowTyCoVarsOfTypesInScope tys
   where zip_tcvsubst :: [TyCoVar] -> [Type] -> TCvSubst -> TCvSubst
         zip_tcvsubst (tv:tvs) (ty:tys) subst
           = zip_tcvsubst tvs tys (extendTCvSubst subst tv ty)
@@ -449,7 +449,7 @@ mkTvSubstPrs prs =
     assertPpr onlyTyVarsAndNoCoercionTy (text "prs" <+> ppr prs) $
     mkTvSubst in_scope tenv
   where tenv = mkVarEnv prs
-        in_scope = mkInScopeSet $ shallowTyCoVarsOfTypes $ map snd prs
+        in_scope = shallowTyCoVarsOfTypesInScope $ map snd prs
         onlyTyVarsAndNoCoercionTy =
           and [ isTyVar tv && not (isCoercionTy ty)
               | (tv, ty) <- prs ]
