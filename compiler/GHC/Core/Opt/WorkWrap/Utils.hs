@@ -41,7 +41,6 @@ import GHC.Types.Id.Info
 import GHC.Types.Demand
 import GHC.Types.Cpr
 import GHC.Types.Id.Make ( voidArgId, voidPrimId )
-import GHC.Types.Var.Env
 import GHC.Types.Basic
 import GHC.Types.Unique.Supply
 import GHC.Types.Name ( getOccFS )
@@ -216,8 +215,8 @@ mkWwBodies opts fun_id arg_vars res_ty demands res_cpr
         -- See Note [Freshen WW arguments]
         -- and Note [Zap IdInfo on worker args]
         ; uniq_supply <- getUniqueSupplyM
-        ; let args_free_tcvs = tyCoVarsOfTypes (res_ty : map varType arg_vars)
-              empty_subst = mkEmptySubst (mkInScopeSet args_free_tcvs)
+        ; let args_free_tcvs = tyCoVarsOfTypesInScope (res_ty : map varType arg_vars)
+              empty_subst = mkEmptySubst args_free_tcvs
               zapped_arg_vars = map zap_var arg_vars
               (subst, cloned_arg_vars) = cloneBndrs empty_subst uniq_supply zapped_arg_vars
               res_ty' = GHC.Core.Subst.substTy subst res_ty

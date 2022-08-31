@@ -179,7 +179,7 @@ topSkolemise :: SkolemInfo
 topSkolemise skolem_info ty
   = go init_subst idHsWrapper [] [] ty
   where
-    init_subst = mkEmptyTCvSubst (mkInScopeSet (tyCoVarsOfType ty))
+    init_subst = mkEmptyTCvSubst (tyCoVarsOfTypeInScope ty)
 
     -- Why recursive?  See Note [Skolemisation]
     go subst wrap tv_prs ev_vars ty
@@ -335,7 +335,7 @@ instDFunType dfun_id dfun_inst_tys
   where
     dfun_ty = idType dfun_id
     (dfun_tvs, dfun_theta, _) = tcSplitSigmaTy dfun_ty
-    empty_subst = mkEmptyTCvSubst (mkInScopeSet (tyCoVarsOfType dfun_ty))
+    empty_subst = mkEmptyTCvSubst (tyCoVarsOfTypeInScope dfun_ty)
                   -- With quantified constraints, the
                   -- type of a dfun may not be closed
 
@@ -382,7 +382,7 @@ tcInstInvisibleTyBindersN 0 kind
 tcInstInvisibleTyBindersN n ty
   = go n empty_subst ty
   where
-    empty_subst = mkEmptyTCvSubst (mkInScopeSet (tyCoVarsOfType ty))
+    empty_subst = mkEmptyTCvSubst (tyCoVarsOfTypeInScope ty)
 
     go n subst kind
       | n > 0

@@ -160,6 +160,7 @@ module GHC.Core.Type (
         -- * Type free variables
         tyCoFVsOfType, tyCoFVsBndr, tyCoFVsVarBndr, tyCoFVsVarBndrs,
         tyCoVarsOfType, tyCoVarsOfTypes,
+        tyCoVarsOfTypeInScope, tyCoVarsOfTypesInScope,
         tyCoVarsOfTypeDSet,
         coVarsOfType,
         coVarsOfTypes,
@@ -555,7 +556,7 @@ expandTypeSynonyms :: Type -> Type
 expandTypeSynonyms ty
   = go (mkEmptyTCvSubst in_scope) ty
   where
-    in_scope = mkInScopeSet (tyCoVarsOfType ty)
+    in_scope = tyCoVarsOfTypeInScope ty
 
     go subst (TyConApp tc tys)
       | Just (tenv, rhs, tys') <- expandSynTyCon_maybe tc expanded_tys
@@ -1363,8 +1364,8 @@ piResultTy_maybe ty arg = case coreFullView ty of
   FunTy { ft_res = res } -> Just res
 
   ForAllTy (Bndr tv _) res
-    -> let empty_subst = mkEmptyTCvSubst $ mkInScopeSet $
-                         tyCoVarsOfTypes [arg,res]
+    -> let empty_subst = mkEmptyTCvSubst $
+                         tyCoVarsOfTypesInScope [arg,res]
        in Just (substTy (extendTCvSubst empty_subst tv arg) res)
 
   _ -> Nothing
@@ -1405,7 +1406,7 @@ piResultTys ty orig_args@(arg:args)
   | otherwise
   = pprPanic "piResultTys1" (ppr ty $$ ppr orig_args)
   where
-    init_subst = mkEmptyTCvSubst $ mkInScopeSet (tyCoVarsOfTypes (ty:orig_args))
+    init_subst = mkEmptyTCvSubst (tyCoVarsOfTypesInScope (ty:orig_args))
 
     go :: TCvSubst -> Type -> [Type] -> Type
     go subst ty [] = substTyUnchecked subst ty
@@ -1641,10 +1642,10 @@ mk_cast_ty orig_ty co = go orig_ty
       -- (EQ4) from the Note
       -- See Note [Weird typing rule for ForAllTy] in GHC.Core.TyCo.Rep.
       | isTyVar tv
-      , let fvs = tyCoVarsOfCo co
+      , let fvs = tyCoVarsOfCoInScope co
       = -- have to make sure that pushing the co in doesn't capture the bound var!
-        if tv `elemVarSet` fvs
-        then let empty_subst = mkEmptyTCvSubst (mkInScopeSet fvs)
+        if tv `elemInScopeSet` fvs
+        then let empty_subst = mkEmptyTCvSubst fvs
                  (subst, tv') = substVarBndr empty_subst tv
              in ForAllTy (Bndr tv' vis) (substTy subst inner_ty `mk_cast_ty` co)
         else ForAllTy (Bndr tv vis) (inner_ty `mk_cast_ty` co)
@@ -2815,13 +2816,13 @@ nonDetCmpType t1 t2
   -- we know k1 and k2 have the same kind, because they both have kind *.
   = nonDetCmpTypeX rn_env t1 t2
   where
-    rn_env = mkRnEnv2 (mkInScopeSet (tyCoVarsOfTypes [t1, t2]))
+    rn_env = mkRnEnv2 (tyCoVarsOfTypesInScope [t1, t2])
 {-# INLINE nonDetCmpType #-}
 
 nonDetCmpTypes :: [Type] -> [Type] -> Ordering
 nonDetCmpTypes ts1 ts2 = nonDetCmpTypesX rn_env ts1 ts2
   where
-    rn_env = mkRnEnv2 (mkInScopeSet (tyCoVarsOfTypes (ts1 ++ ts2)))
+    rn_env = mkRnEnv2 (tyCoVarsOfTypesInScope (ts1 ++ ts2))
 
 -- | An ordering relation between two 'Type's (known below as @t1 :: k1@
 -- and @t2 :: k2@)

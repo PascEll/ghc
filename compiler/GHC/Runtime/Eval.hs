@@ -1146,7 +1146,7 @@ checkForExistence clsInst mb_inst_tys = do
       Just (_, tys@(_:_)) -> all isTyVarTy tys
       _                   -> isTyVarTy ty
 
-  empty_subst = mkEmptyTCvSubst (mkInScopeSet (tyCoVarsOfType (idType $ is_dfun clsInst)))
+  empty_subst = mkEmptyTCvSubst (tyCoVarsOfTypeInScope (idType $ is_dfun clsInst))
 
   {- Create a ClsInst with instantiated arguments and constraints.
 

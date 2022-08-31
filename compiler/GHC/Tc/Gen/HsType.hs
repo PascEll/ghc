@@ -1572,8 +1572,7 @@ tcInferTyApps_nosat mode orig_hs_ty fun orig_hs_args
            -- Note that in a typical application (F t1 t2 t3),
            -- the 'fun' is just a TyCon, so tcTypeKind is fast
 
-        empty_subst = mkEmptyTCvSubst $ mkInScopeSet $
-                      tyCoVarsOfType fun_ki
+        empty_subst = mkEmptyTCvSubst $ tyCoVarsOfTypeInScope fun_ki
 
     go :: Int             -- The # of the next argument
        -> TcType          -- Function applied to some args
@@ -3843,7 +3842,7 @@ tcbVisibilities :: TyCon -> [Type] -> [TyConBndrVis]
 tcbVisibilities tc orig_args
   = go (tyConKind tc) init_subst orig_args
   where
-    init_subst = mkEmptyTCvSubst (mkInScopeSet (tyCoVarsOfTypes orig_args))
+    init_subst = mkEmptyTCvSubst (tyCoVarsOfTypesInScope orig_args)
     go _ _ []
       = []
 

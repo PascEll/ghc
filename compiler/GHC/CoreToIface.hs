@@ -340,7 +340,7 @@ toIfaceAppArgsX :: VarSet -> Kind -> [Type] -> IfaceAppArgs
 toIfaceAppArgsX fr kind ty_args
   = go (mkEmptyTCvSubst in_scope) kind ty_args
   where
-    in_scope = mkInScopeSet (tyCoVarsOfTypes ty_args)
+    in_scope = tyCoVarsOfTypesInScope ty_args
 
     go _   _                   []     = IA_Nil
     go env ty                  ts

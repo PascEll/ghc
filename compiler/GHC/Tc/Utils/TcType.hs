@@ -1794,7 +1794,7 @@ tc_eq_type keep_syns vis_only orig_ty1 orig_ty2
         bndrs = tyConBinders tc
         inviss  = map isInvisibleTyConBinder bndrs
 
-    orig_env = mkRnEnv2 $ mkInScopeSet $ tyCoVarsOfTypes [orig_ty1, orig_ty2]
+    orig_env = mkRnEnv2 $ tyCoVarsOfTypesInScope [orig_ty1, orig_ty2]
 
 {-# INLINE tc_eq_type #-} -- See Note [Specialising tc_eq_type].
 

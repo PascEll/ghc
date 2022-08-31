@@ -24,7 +24,6 @@ import GHC.Core.TyCon
 import GHC.Core.TyCo.Rep
 import GHC.Core.Type
 import GHC.Types.Var
-import GHC.Types.Var.Env
 import GHC.Parser.Annotation
 import qualified GHC.Data.Strict as Strict
 
@@ -63,7 +62,7 @@ resolveVisibility :: Type -> [Type] -> [(Bool,Type)]
 resolveVisibility kind ty_args
   = go (mkEmptyTCvSubst in_scope) kind ty_args
   where
-    in_scope = mkInScopeSet (tyCoVarsOfTypes ty_args)
+    in_scope = tyCoVarsOfTypesInScope ty_args
 
     go _   _                   []     = []
     go env ty                  ts

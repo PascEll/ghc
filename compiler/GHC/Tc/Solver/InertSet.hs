@@ -1577,7 +1577,7 @@ mightEqualLater inert_set given_pred given_loc wanted_pred wanted_loc
       _                        -> True
 
   where
-    in_scope  = mkInScopeSet $ tyCoVarsOfTypes [given_pred, wanted_pred]
+    in_scope  = tyCoVarsOfTypesInScope [given_pred, wanted_pred]
 
     -- NB: flatten both at the same time, so that we can share mappings
     -- from type family applications to variables, and also to guarantee

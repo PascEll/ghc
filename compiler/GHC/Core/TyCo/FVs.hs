@@ -3,6 +3,7 @@
 module GHC.Core.TyCo.FVs
   (     shallowTyCoVarsOfType, shallowTyCoVarsOfTypes, shallowTyCoVarsOfTypesInScope,
         tyCoVarsOfType,        tyCoVarsOfTypes,
+        tyCoVarsOfTypeInScope, tyCoVarsOfTypesInScope,
         tyCoVarsOfTypeDSet, tyCoVarsOfTypesDSet,
 
         tyCoFVsBndr, tyCoFVsVarBndr, tyCoFVsVarBndrs,
@@ -14,6 +15,7 @@ module GHC.Core.TyCo.FVs
 
         shallowTyCoVarsOfCo, shallowTyCoVarsOfCos, shallowTyCoVarsOfCosInScope,
         tyCoVarsOfCo, tyCoVarsOfCos, tyCoVarsOfMCo,
+        tyCoVarsOfCoInScope, tyCoVarsOfCosInScope,
         coVarsOfType, coVarsOfTypes,
         coVarsOfCo, coVarsOfCos,
         tyCoVarsOfCoDSet,
@@ -277,14 +279,23 @@ tyCoVarsOfType ty = runTyCoVars (deep_ty ty)
 -- Alternative:
 --   tyCoVarsOfType ty = closeOverKinds (shallowTyCoVarsOfType ty)
 
+tyCoVarsOfTypeInScope :: Type -> InScopeSet
+tyCoVarsOfTypeInScope ty = appEndo (deep_ty_in_scope ty) emptyInScopeSet
+
 tyCoVarsOfTypes :: [Type] -> TyCoVarSet
 tyCoVarsOfTypes tys = runTyCoVars (deep_tys tys)
 -- Alternative:
 --   tyCoVarsOfTypes tys = closeOverKinds (shallowTyCoVarsOfTypes tys)
 
+tyCoVarsOfTypesInScope :: [Type] -> InScopeSet
+tyCoVarsOfTypesInScope tys = appEndo (deep_tys_in_scope tys) emptyInScopeSet
+
 tyCoVarsOfCo :: Coercion -> TyCoVarSet
 -- See Note [Free variables of types]
 tyCoVarsOfCo co = runTyCoVars (deep_co co)
+
+tyCoVarsOfCoInScope :: Coercion -> InScopeSet
+tyCoVarsOfCoInScope co = appEndo (deep_co_in_scope co) emptyInScopeSet
 
 tyCoVarsOfMCo :: MCoercion -> TyCoVarSet
 tyCoVarsOfMCo MRefl    = emptyVarSet
@@ -293,11 +304,21 @@ tyCoVarsOfMCo (MCo co) = tyCoVarsOfCo co
 tyCoVarsOfCos :: [Coercion] -> TyCoVarSet
 tyCoVarsOfCos cos = runTyCoVars (deep_cos cos)
 
+tyCoVarsOfCosInScope :: [Coercion] -> InScopeSet
+tyCoVarsOfCosInScope cos = appEndo (deep_cos_in_scope cos) emptyInScopeSet
+
 deep_ty  :: Type       -> Endo TyCoVarSet
 deep_tys :: [Type]     -> Endo TyCoVarSet
 deep_co  :: Coercion   -> Endo TyCoVarSet
 deep_cos :: [Coercion] -> Endo TyCoVarSet
 (deep_ty, deep_tys, deep_co, deep_cos) = foldTyCo deepTcvFolder emptyVarSet
+
+deep_ty_in_scope  :: Type       -> Endo InScopeSet
+deep_tys_in_scope :: [Type]     -> Endo InScopeSet
+deep_co_in_scope  :: Coercion   -> Endo InScopeSet
+deep_cos_in_scope :: [Coercion] -> Endo InScopeSet
+(deep_ty_in_scope, deep_tys_in_scope, deep_co_in_scope, deep_cos_in_scope)
+  = foldTyCo deepTcvFolderInScope emptyVarSet
 
 deepTcvFolder :: TyCoFolder TyCoVarSet (Endo TyCoVarSet)
 deepTcvFolder = TyCoFolder { tcf_view = noView
@@ -310,6 +331,23 @@ deepTcvFolder = TyCoFolder { tcf_view = noView
                   | v `elemVarSet` acc = acc
                   | otherwise          = appEndo (deep_ty (varType v)) $
                                          acc `extendVarSet` v
+
+    do_bndr is tcv _ = extendVarSet is tcv
+    do_hole is hole  = do_tcv is (coHoleCoVar hole)
+                       -- See Note [CoercionHoles and coercion free variables]
+                       -- in GHC.Core.TyCo.Rep
+
+deepTcvFolderInScope :: TyCoFolder TyCoVarSet (Endo InScopeSet)
+deepTcvFolderInScope = TyCoFolder { tcf_view = noView
+                                  , tcf_tyvar = do_tcv, tcf_covar = do_tcv
+                                  , tcf_hole  = do_hole, tcf_tycobinder = do_bndr }
+  where
+    do_tcv is v = Endo do_it
+      where
+        do_it acc | v `elemVarSet` is      = acc
+                  | v `elemInScopeSet` acc = acc
+                  | otherwise              = appEndo (deep_ty_in_scope (varType v)) $
+                                             acc `extendInScopeSet` v
 
     do_bndr is tcv _ = extendVarSet is tcv
     do_hole is hole  = do_tcv is (coHoleCoVar hole)

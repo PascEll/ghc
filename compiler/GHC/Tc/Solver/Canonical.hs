@@ -1199,7 +1199,7 @@ can_eq_nc_forall :: CtEvidence -> EqRel
 
 can_eq_nc_forall ev eq_rel s1 s2
  | CtWanted { ctev_loc = loc, ctev_dest = orig_dest, ctev_rewriters = rewriters } <- ev
- = do { let free_tvs       = tyCoVarsOfTypes [s1,s2]
+ = do { let in_scope       = tyCoVarsOfTypesInScope [s1,s2]
             (bndrs1, phi1) = tcSplitForAllTyVarBinders s1
             (bndrs2, phi2) = tcSplitForAllTyVarBinders s2
       ; if not (equalLength bndrs1 bndrs2)
@@ -1210,7 +1210,7 @@ can_eq_nc_forall ev eq_rel s1 s2
                 ; canEqHardFailure ev s1 s2 }
         else
    do { traceTcS "Creating implication for polytype equality" $ ppr ev
-      ; let empty_subst1 = mkEmptyTCvSubst $ mkInScopeSet free_tvs
+      ; let empty_subst1 = mkEmptyTCvSubst in_scope
       ; skol_info <- mkSkolemInfo (UnifyForAllSkol phi1)
       ; (subst1, skol_tvs) <- tcInstSkolTyVarsX skol_info empty_subst1 $
                               binderVars bndrs1

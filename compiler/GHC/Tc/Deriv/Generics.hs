@@ -50,7 +50,6 @@ import GHC.Driver.Session
 import GHC.Utils.Error( Validity'(..), andValid )
 import GHC.Types.SrcLoc
 import GHC.Data.Bag
-import GHC.Types.Var.Env
 import GHC.Types.Var.Set (elemVarSet)
 import GHC.Utils.Outputable
 import GHC.Utils.Panic
@@ -604,7 +603,7 @@ tc_mkRepTy gk get_fixity dit@(DerivInstTys{ dit_rep_tc = tycon
                   -- "wrinkle" section of
                   -- Note [Generating a correctly typed Rep instance].
                   env      = zipTyEnv [argVar] [anyTypeOfKind (tyVarKind argVar)]
-                  in_scope = mkInScopeSet (tyCoVarsOfTypes tycon_args)
+                  in_scope = tyCoVarsOfTypesInScope tycon_args
                   subst    = mkTvSubst in_scope env in
 
               substTy subst . argTyFold argVar (ArgTyAlg

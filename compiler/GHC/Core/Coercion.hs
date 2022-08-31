@@ -471,8 +471,9 @@ decomposePiCos :: HasDebugCallStack
 decomposePiCos orig_co (Pair orig_k1 orig_k2) orig_args
   = go [] (orig_subst,orig_k1) orig_co (orig_subst,orig_k2) orig_args
   where
-    orig_subst = mkEmptyTCvSubst $ mkInScopeSet $
-                 tyCoVarsOfTypes orig_args `unionVarSet` tyCoVarsOfCo orig_co
+    orig_subst = mkEmptyTCvSubst $
+                 tyCoVarsOfTypesInScope orig_args `unionInScope`
+                 tyCoVarsOfCoInScope orig_co
 
     go :: [CoercionN]      -- accumulator for argument coercions, reversed
        -> (TCvSubst,Kind)  -- Lhs kind of coercion
@@ -1947,7 +1948,7 @@ emptyLiftingContext in_scope = LC (mkEmptyTCvSubst in_scope) emptyVarEnv
 
 mkLiftingContext :: [(TyCoVar,Coercion)] -> LiftingContext
 mkLiftingContext pairs
-  = LC (mkEmptyTCvSubst $ mkInScopeSet $ tyCoVarsOfCos (map snd pairs))
+  = LC (mkEmptyTCvSubst $ tyCoVarsOfCosInScope (map snd pairs))
        (mkVarEnv pairs)
 
 mkSubstLiftingContext :: TCvSubst -> LiftingContext
@@ -2433,7 +2434,7 @@ coercionRKind co
          -- kind_co always has kind @Type@, thus @isGReflCo@
        | otherwise                = go_forall empty_subst co
        where
-         empty_subst = mkEmptyTCvSubst (mkInScopeSet $ tyCoVarsOfCo co)
+         empty_subst = mkEmptyTCvSubst (tyCoVarsOfCoInScope co)
 
     go_ax_inst ax ind tys
       | CoAxBranch { cab_tvs = tvs, cab_cvs = cvs
@@ -2645,7 +2646,7 @@ buildCoercion orig_ty1 orig_ty2 = go orig_ty1 orig_ty2
       = assert (isTyVar tv2) $
         mkForAllCo tv1 kind_co (go ty1 ty2')
       where kind_co  = go (tyVarKind tv1) (tyVarKind tv2)
-            in_scope = mkInScopeSet $ tyCoVarsOfType ty2 `unionVarSet` tyCoVarsOfCo kind_co
+            in_scope = tyCoVarsOfTypeInScope ty2 `unionInScope` tyCoVarsOfCoInScope kind_co
             ty2'     = substTyWithInScope in_scope [tv2]
                          [mkTyVarTy tv1 `mkCastTy` kind_co]
                          ty2
@@ -2668,8 +2669,8 @@ buildCoercion orig_ty1 orig_ty2 = go orig_ty1 orig_ty2
             eta1 = mkNthCo r 2 kind_co'
             eta2 = mkNthCo r 3 kind_co'
 
-            subst = mkEmptyTCvSubst $ mkInScopeSet $
-                      tyCoVarsOfType ty2 `unionVarSet` tyCoVarsOfCo kind_co
+            subst = mkEmptyTCvSubst $
+                      tyCoVarsOfTypeInScope ty2 `unionInScope` tyCoVarsOfCoInScope kind_co
             ty2'  = substTy (extendCvSubst subst cv2 $ mkSymCo eta1 `mkTransCo`
                                                        mkCoVarCo cv1 `mkTransCo`
                                                        eta2)

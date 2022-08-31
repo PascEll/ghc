@@ -46,7 +46,7 @@ import GHC.Builtin.PrimOps( tagToEnumKey )
 import GHC.Builtin.Names
 import GHC.Driver.Session
 import GHC.Types.SrcLoc
-import GHC.Types.Var.Env  ( emptyTidyEnv, mkInScopeSet )
+import GHC.Types.Var.Env  ( emptyTidyEnv )
 import GHC.Data.Maybe
 import GHC.Utils.Misc
 import GHC.Utils.Outputable as Outputable
@@ -709,7 +709,7 @@ tcVTA fun_ty hs_ty
        ; inner_ty <- zonkTcType inner_ty
              -- See Note [Visible type application zonk]
 
-       ; let in_scope  = mkInScopeSet (tyCoVarsOfTypes [fun_ty, ty_arg])
+       ; let in_scope  = tyCoVarsOfTypesInScope [fun_ty, ty_arg]
              insted_ty = substTyWithInScope in_scope [tv] [ty_arg] inner_ty
                          -- NB: tv and ty_arg have the same kind, so this
                          --     substitution is kind-respecting

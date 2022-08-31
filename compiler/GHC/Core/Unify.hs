@@ -201,7 +201,7 @@ tc_match_tys :: BindFun
 tc_match_tys bind_me match_kis tys1 tys2
   = tc_match_tys_x bind_me match_kis (mkEmptyTCvSubst in_scope) tys1 tys2
   where
-    in_scope = mkInScopeSet (tyCoVarsOfTypes tys1 `unionVarSet` tyCoVarsOfTypes tys2)
+    in_scope = tyCoVarsOfTypesInScope tys1 `unionInScope` tyCoVarsOfTypesInScope tys2
 
 -- | Worker for 'tcMatchTysX' and 'tcMatchTyKisX'
 tc_match_tys_x :: BindFun
@@ -489,7 +489,7 @@ tcUnifyTyWithTFs twoWay t1 t2
       -- pre-unification algorithm.
       SurelyApart      -> Nothing
   where
-    in_scope = mkInScopeSet $ tyCoVarsOfTypes [t1, t2]
+    in_scope = tyCoVarsOfTypesInScope [t1, t2]
     rn_env   = mkRnEnv2 in_scope
 
     maybe_fix | twoWay    = niFixTCvSubst
@@ -592,8 +592,8 @@ tc_unify_tys_fg match_kis bind_fn tys1 tys2
                                   tys1 tys2
        ; return $ niFixTCvSubst env }
   where
-    vars = tyCoVarsOfTypes tys1 `unionVarSet` tyCoVarsOfTypes tys2
-    env  = mkRnEnv2 $ mkInScopeSet vars
+    in_scope = tyCoVarsOfTypesInScope tys1 `unionInScope` tyCoVarsOfTypesInScope tys2
+    env  = mkRnEnv2 $ in_scope
 
 -- | This function is actually the one to call the unifier -- a little
 -- too general for outside clients, though.

@@ -85,7 +85,6 @@ import GHC.Types.Name
 import GHC.Builtin.Names
 import GHC.Core.Predicate
 import GHC.Types.Var
-import GHC.Types.Var.Env
 import GHC.Types.Basic
 import GHC.Data.FastString
 import GHC.Unit.Types
@@ -1573,7 +1572,7 @@ dataConInstUnivs dc dc_args = chkAppend dc_args $ map mkTyVarTy dc_args_suffix
                           splitAtList dc_args $ dataConUnivTyVars dc
     (_, dc_args_suffix) = substTyVarBndrs prefix_subst dc_univs_suffix
     prefix_subst        = mkTvSubst prefix_in_scope prefix_env
-    prefix_in_scope     = mkInScopeSet $ tyCoVarsOfTypes dc_args
+    prefix_in_scope     = tyCoVarsOfTypesInScope dc_args
     prefix_env          = zipTyEnv dc_univs_prefix dc_args
 
 -- | Returns the argument types of the wrapper, excluding all dictionary arguments
