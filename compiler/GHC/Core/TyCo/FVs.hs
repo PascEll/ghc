@@ -49,6 +49,7 @@ import GHC.Prelude
 import {-# SOURCE #-} GHC.Core.Type (coreView, partitionInvisibleTypes)
 
 import Data.Monoid as DM ( Endo(..), Any(..) )
+import Data.Semigroup
 import GHC.Core.TyCo.Rep
 import GHC.Core.TyCon
 import GHC.Types.Var
@@ -59,6 +60,9 @@ import GHC.Types.Var.Set
 import GHC.Types.Var.Env
 import GHC.Utils.Misc
 import GHC.Utils.Panic
+
+import Control.Monad
+import Control.Monad.ST
 
 {-
 %************************************************************************
@@ -267,6 +271,14 @@ runTyCoVars :: Endo TyCoVarSet -> TyCoVarSet
 {-# INLINE runTyCoVars #-}
 runTyCoVars f = appEndo f emptyVarSet
 
+newtype EndoM m a = EndoM { appEndoM :: a -> m a }
+
+instance Monad m => Semigroup (EndoM m a) where
+  (EndoM f) <> (EndoM g) = EndoM (f <=< g)
+
+instance Monad m => Monoid (EndoM m a) where
+  mempty = EndoM return
+
 {- *********************************************************************
 *                                                                      *
           Deep free variables
@@ -280,7 +292,8 @@ tyCoVarsOfType ty = runTyCoVars (deep_ty ty)
 --   tyCoVarsOfType ty = closeOverKinds (shallowTyCoVarsOfType ty)
 
 tyCoVarsOfTypeInScope :: Type -> InScopeSet
-tyCoVarsOfTypeInScope ty = appEndo (deep_ty_in_scope ty) emptyInScopeSet
+tyCoVarsOfTypeInScope ty = runST $
+  appEndoM (deep_ty_in_scope ty) emptyTInScopeSet >>= persistentInScopeSet
 
 tyCoVarsOfTypes :: [Type] -> TyCoVarSet
 tyCoVarsOfTypes tys = runTyCoVars (deep_tys tys)
@@ -288,14 +301,16 @@ tyCoVarsOfTypes tys = runTyCoVars (deep_tys tys)
 --   tyCoVarsOfTypes tys = closeOverKinds (shallowTyCoVarsOfTypes tys)
 
 tyCoVarsOfTypesInScope :: [Type] -> InScopeSet
-tyCoVarsOfTypesInScope tys = appEndo (deep_tys_in_scope tys) emptyInScopeSet
+tyCoVarsOfTypesInScope tys = runST $
+  appEndoM (deep_tys_in_scope tys) emptyTInScopeSet >>= persistentInScopeSet
 
 tyCoVarsOfCo :: Coercion -> TyCoVarSet
 -- See Note [Free variables of types]
 tyCoVarsOfCo co = runTyCoVars (deep_co co)
 
 tyCoVarsOfCoInScope :: Coercion -> InScopeSet
-tyCoVarsOfCoInScope co = appEndo (deep_co_in_scope co) emptyInScopeSet
+tyCoVarsOfCoInScope co = runST $
+  appEndoM (deep_co_in_scope co) emptyTInScopeSet >>= persistentInScopeSet
 
 tyCoVarsOfMCo :: MCoercion -> TyCoVarSet
 tyCoVarsOfMCo MRefl    = emptyVarSet
@@ -305,7 +320,8 @@ tyCoVarsOfCos :: [Coercion] -> TyCoVarSet
 tyCoVarsOfCos cos = runTyCoVars (deep_cos cos)
 
 tyCoVarsOfCosInScope :: [Coercion] -> InScopeSet
-tyCoVarsOfCosInScope cos = appEndo (deep_cos_in_scope cos) emptyInScopeSet
+tyCoVarsOfCosInScope cos = runST $
+  appEndoM (deep_cos_in_scope cos) emptyTInScopeSet >>= persistentInScopeSet
 
 deep_ty  :: Type       -> Endo TyCoVarSet
 deep_tys :: [Type]     -> Endo TyCoVarSet
@@ -313,10 +329,10 @@ deep_co  :: Coercion   -> Endo TyCoVarSet
 deep_cos :: [Coercion] -> Endo TyCoVarSet
 (deep_ty, deep_tys, deep_co, deep_cos) = foldTyCo deepTcvFolder emptyVarSet
 
-deep_ty_in_scope  :: Type       -> Endo InScopeSet
-deep_tys_in_scope :: [Type]     -> Endo InScopeSet
-deep_co_in_scope  :: Coercion   -> Endo InScopeSet
-deep_cos_in_scope :: [Coercion] -> Endo InScopeSet
+deep_ty_in_scope  :: Type       -> EndoM (ST s) (TInScopeSet s)
+deep_tys_in_scope :: [Type]     -> EndoM (ST s) (TInScopeSet s)
+deep_co_in_scope  :: Coercion   -> EndoM (ST s) (TInScopeSet s)
+deep_cos_in_scope :: [Coercion] -> EndoM (ST s) (TInScopeSet s)
 (deep_ty_in_scope, deep_tys_in_scope, deep_co_in_scope, deep_cos_in_scope)
   = foldTyCo deepTcvFolderInScope emptyVarSet
 
@@ -337,17 +353,21 @@ deepTcvFolder = TyCoFolder { tcf_view = noView
                        -- See Note [CoercionHoles and coercion free variables]
                        -- in GHC.Core.TyCo.Rep
 
-deepTcvFolderInScope :: TyCoFolder TyCoVarSet (Endo InScopeSet)
+deepTcvFolderInScope :: TyCoFolder TyCoVarSet (EndoM (ST s) (TInScopeSet s))
 deepTcvFolderInScope = TyCoFolder { tcf_view = noView
                                   , tcf_tyvar = do_tcv, tcf_covar = do_tcv
                                   , tcf_hole  = do_hole, tcf_tycobinder = do_bndr }
   where
-    do_tcv is v = Endo do_it
+    do_tcv :: VarSet -> Var -> EndoM (ST s) (TInScopeSet s)
+    do_tcv is v = EndoM do_it
       where
-        do_it acc | v `elemVarSet` is      = acc
-                  | v `elemInScopeSet` acc = acc
-                  | otherwise              = appEndo (deep_ty_in_scope (varType v)) $
-                                             acc `extendInScopeSet` v
+        do_it acc | v `elemVarSet` is = return acc
+                  | otherwise = do
+                      elem <- v `elemTInScopeSet` acc
+                      if elem
+                        then return acc
+                        else appEndoM (deep_ty_in_scope (varType v)) =<<
+                             acc `extendTInScopeSet` v
 
     do_bndr is tcv _ = extendVarSet is tcv
     do_hole is hole  = do_tcv is (coHoleCoVar hole)
@@ -370,7 +390,8 @@ shallowTyCoVarsOfTypes :: [Type] -> TyCoVarSet
 shallowTyCoVarsOfTypes tys = runTyCoVars (shallow_tys tys)
 
 shallowTyCoVarsOfTypesInScope :: [Type] -> InScopeSet
-shallowTyCoVarsOfTypesInScope tys = appEndo (shallow_tys_in_scope tys) emptyInScopeSet
+shallowTyCoVarsOfTypesInScope tys = runST $
+  appEndoM (shallow_tys_in_scope tys) emptyTInScopeSet >>= persistentInScopeSet
 
 shallowTyCoVarsOfCo :: Coercion -> TyCoVarSet
 shallowTyCoVarsOfCo co = runTyCoVars (shallow_co co)
@@ -379,7 +400,8 @@ shallowTyCoVarsOfCos :: [Coercion] -> TyCoVarSet
 shallowTyCoVarsOfCos cos = runTyCoVars (shallow_cos cos)
 
 shallowTyCoVarsOfCosInScope :: [Coercion] -> InScopeSet
-shallowTyCoVarsOfCosInScope cos = appEndo (shallow_cos_in_scope cos) emptyInScopeSet
+shallowTyCoVarsOfCosInScope cos = runST $
+  appEndoM (shallow_cos_in_scope cos) emptyTInScopeSet >>= persistentInScopeSet
 
 -- | Returns free variables of types, including kind variables as
 -- a non-deterministic set. For type synonyms it does /not/ expand the
@@ -401,11 +423,6 @@ shallow_co  :: Coercion   -> Endo TyCoVarSet
 shallow_cos :: [Coercion] -> Endo TyCoVarSet
 (shallow_ty, shallow_tys, shallow_co, shallow_cos) = foldTyCo shallowTcvFolder emptyVarSet
 
-shallow_tys_in_scope :: [Type]     -> Endo InScopeSet
-shallow_cos_in_scope :: [Coercion] -> Endo InScopeSet
-(_, shallow_tys_in_scope, _, shallow_cos_in_scope)
-  = foldTyCo shallowTcvFolderInScope emptyVarSet
-
 shallowTcvFolder :: TyCoFolder TyCoVarSet (Endo TyCoVarSet)
 shallowTcvFolder = TyCoFolder { tcf_view = noView
                               , tcf_tyvar = do_tcv, tcf_covar = do_tcv
@@ -420,16 +437,24 @@ shallowTcvFolder = TyCoFolder { tcf_view = noView
     do_bndr is tcv _ = extendVarSet is tcv
     do_hole _ _  = mempty   -- Ignore coercion holes
 
-shallowTcvFolderInScope :: TyCoFolder TyCoVarSet (Endo InScopeSet)
+shallow_tys_in_scope :: [Type]     -> EndoM (ST s) (TInScopeSet s)
+shallow_cos_in_scope :: [Coercion] -> EndoM (ST s) (TInScopeSet s)
+(_, shallow_tys_in_scope, _, shallow_cos_in_scope)
+  = foldTyCo shallowTcvFolderInScope emptyVarSet
+
+shallowTcvFolderInScope :: TyCoFolder TyCoVarSet (EndoM (ST s) (TInScopeSet s))
 shallowTcvFolderInScope = TyCoFolder { tcf_view = noView
                                      , tcf_tyvar = do_tcv, tcf_covar = do_tcv
                                      , tcf_hole  = do_hole, tcf_tycobinder = do_bndr }
   where
-    do_tcv is v = Endo do_it
+    do_tcv is v = EndoM do_it
       where
-        do_it acc | v `elemVarSet` is      = acc
-                  | v `elemInScopeSet` acc = acc
-                  | otherwise              = acc `extendInScopeSet` v
+        do_it acc | v `elemVarSet` is = return acc
+                  | otherwise = do
+                      elem <- v `elemTInScopeSet` acc
+                      if elem
+                        then return acc
+                        else acc `extendTInScopeSet` v
 
     do_bndr is tcv _ = extendVarSet is tcv
     do_hole _ _  = mempty   -- Ignore coercion holes
