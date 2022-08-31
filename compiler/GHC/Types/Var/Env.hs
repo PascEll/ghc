@@ -50,7 +50,7 @@ module GHC.Types.Var.Env (
         InScopeSet,
 
         -- ** Operations on InScopeSets
-        emptyInScopeSet, mkInScopeSet, delInScopeSet,
+        emptyInScopeSet, mkInScopeSet, mkInScopeSetList, delInScopeSet,
         extendInScopeSet, extendInScopeSetList, extendInScopeSetSet,
         getInScopeVars, lookupInScope, lookupInScope_Directly,
         unionInScope, elemInScopeSet, uniqAway,
@@ -117,6 +117,9 @@ varSetToAscList = IntMap.toAscList . ufmToIntMap . getUniqSet
 
 emptyFastVarSet :: FastVarSet
 emptyFastVarSet = FastVarSet WordMap.empty
+
+mkFastVarSetList :: [Var] -> FastVarSet
+mkFastVarSetList = FastVarSet . WordMap.fromList . (map (\v -> (varToKey v, v)))
 
 extendFastVarSet :: FastVarSet -> Var -> FastVarSet
 extendFastVarSet (FastVarSet set) var = FastVarSet (insert (varToKey var) var set)
@@ -247,6 +250,9 @@ mkInScopeSet in_scope
   = InScope (FastVarSet (WordMap.fromAscList $ map intKeyToWordKey $ varSetToAscList in_scope))
   where
     intKeyToWordKey (k, v) = (fromIntegral k, v)
+
+mkInScopeSetList :: [Var] -> InScopeSet
+mkInScopeSetList = InScope . mkFastVarSetList
 
 extendInScopeSet :: InScopeSet -> Var -> InScopeSet
 extendInScopeSet (InScope in_scope) v

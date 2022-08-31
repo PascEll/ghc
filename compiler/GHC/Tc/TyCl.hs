@@ -4005,7 +4005,7 @@ mkGADTVars :: [TyVar]    -- ^ The tycon vars
 mkGADTVars tmpl_tvs dc_tvs subst
   = choose [] [] empty_subst empty_subst tmpl_tvs
   where
-    in_scope = mkInScopeSet (mkVarSet tmpl_tvs `unionVarSet` mkVarSet dc_tvs)
+    in_scope = (mkInScopeSetList tmpl_tvs `unionInScope` mkInScopeSetList dc_tvs)
                `unionInScope` getTCvInScope subst
     empty_subst = mkEmptyTCvSubst in_scope
 

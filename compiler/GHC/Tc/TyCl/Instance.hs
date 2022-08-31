@@ -509,7 +509,7 @@ tcClsInstDecl (L loc (ClsInstDecl { cid_poly_ty = hs_ty, cid_binds = binds
         ; (datafam_stuff, tyfam_insts)
              <- tcExtendNameTyVarEnv tv_skol_prs $
                 do  { let mini_env   = mkVarEnv (classTyVars clas `zip` substTys subst inst_tys)
-                          mini_subst = mkTvSubst (mkInScopeSet (mkVarSet skol_tvs)) mini_env
+                          mini_subst = mkTvSubst (mkInScopeSetList skol_tvs) mini_env
                           mb_info    = InClsInst { ai_class = clas
                                                  , ai_tyvars = visible_skol_tvs
                                                  , ai_inst_env = mini_env }

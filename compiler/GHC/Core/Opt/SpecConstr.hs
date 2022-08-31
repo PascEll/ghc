@@ -944,7 +944,7 @@ initScEnv guts
                        sc_vals        = emptyVarEnv,
                        sc_annotations = anns }) }
   where
-    init_subst = mkEmptySubst $ mkInScopeSet $ mkVarSet $
+    init_subst = mkEmptySubst $ mkInScopeSetList $
                  bindersOfBinds (mg_binds guts)
         -- Acccount for top-level bindings that are not in dependency order;
         -- see Note [Glomming] in GHC.Core.Opt.OccurAnal
