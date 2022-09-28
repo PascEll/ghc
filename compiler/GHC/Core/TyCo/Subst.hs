@@ -53,7 +53,7 @@ module GHC.Core.TyCo.Subst
 
         TTCvSubst(..),
         mkTTCvSubst,
-        substTyUncheckedT, substTyVarBndrT, substCoVarBndrT,
+        substTyUncheckedT, substCoUncheckedT, substTyVarBndrT, substCoVarBndrT,
   ) where
 
 import GHC.Prelude
@@ -889,6 +889,12 @@ substCoUnchecked :: TCvSubst -> Coercion -> Coercion
 substCoUnchecked subst co
   | isEmptyTCvSubst subst = co
   | otherwise = subst_co subst co
+
+-- | Persists 'subst' before it is modified.
+substCoUncheckedT :: TTCvSubst s -> Coercion -> ST s Coercion
+substCoUncheckedT subst co
+  | isEmptyTTCvSubst subst = return co
+  | otherwise = subst_co_t subst co
 
 -- | Substitute within several 'Coercion's
 -- The substitution has to satisfy the invariants described in
