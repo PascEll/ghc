@@ -78,6 +78,7 @@ import GHC.Types.Unique.FM      ( pprUniqFM )
 
 import Control.Monad.ST
 import Data.List (mapAccumL)
+import Control.Monad
 
 {-
 ************************************************************************
@@ -641,18 +642,28 @@ addLetFloats floats let_floats
            , sfInScope   = sfInScope floats `extendInScopeFromLF` let_floats }
 
 extendInScopeFromLF :: InScopeSet -> LetFloats -> InScopeSet
-extendInScopeFromLF in_scope (LetFloats binds _)
-  = foldlOL extendInScopeSetBind in_scope binds
+extendInScopeFromLF in_scope (LetFloats binds _) =
+  runST $
+    foldM extendTInScopeSetBind (transientInScopeSet in_scope) binds
+      >>= persistentInScopeSet
 
 addJoinFloats :: SimplFloats -> JoinFloats -> SimplFloats
 addJoinFloats floats join_floats
   = floats { sfJoinFloats = sfJoinFloats floats `addJoinFlts` join_floats
-           , sfInScope    = foldlOL extendInScopeSetBind
-                                    (sfInScope floats) join_floats }
+           , sfInScope    = in_scope' }
+  where
+    in_scope' =
+      runST $
+        foldM extendTInScopeSetBind (transientInScopeSet (sfInScope floats)) join_floats
+          >>= persistentInScopeSet
 
 extendInScopeSetBind :: InScopeSet -> CoreBind -> InScopeSet
 extendInScopeSetBind in_scope bind
   = extendInScopeSetList in_scope (bindersOf bind)
+
+extendTInScopeSetBind :: TInScopeSet s -> CoreBind -> ST s (TInScopeSet s)
+extendTInScopeSetBind in_scope bind
+  = extendTInScopeSetList in_scope (bindersOf bind)
 
 addFloats :: SimplFloats -> SimplFloats -> SimplFloats
 -- Add both let-floats and join-floats for env2 to env1;
