@@ -823,8 +823,8 @@ See also Note [Scaling join point arguments].
 
 simplBinders :: SimplEnv -> [InBndr] -> SimplM (SimplEnv, [OutBndr])
 simplBinders  !env bndrs = return $ runST $ do
-  (env', bndrs') <- simplBindersT (transientSimplEnv env) bndrs
-  persistent_env <- persistentSimplEnv env'
+  (env', !bndrs') <- simplBindersT (transientSimplEnv env) bndrs
+  !persistent_env <- persistentSimplEnv env'
   return (persistent_env, bndrs')
 
 simplBindersT :: TSimplEnv s -> [InBndr] -> ST s (TSimplEnv s, [OutBndr])
@@ -838,16 +838,16 @@ simplBinder :: SimplEnv -> InBndr -> SimplM (SimplEnv, OutBndr)
 -- The substitution is extended only if the variable is cloned, because
 -- we *don't* need to use it to track occurrence info.
 simplBinder !env bndr
-  | isTyVar bndr  = do  { let (env', tv) = substTyVarBndr env bndr
+  | isTyVar bndr  = do  { let !(!env', tv) = substTyVarBndr env bndr
                         ; seqTyVar tv `seq` return (env', tv) }
-  | otherwise     = do  { let (env', id) = substIdBndr env bndr
+  | otherwise     = do  { let !(!env', id) = substIdBndr env bndr
                         ; seqId id `seq` return (env', id) }
 
 simplBinderT :: TSimplEnv s -> InBndr -> ST s (TSimplEnv s, OutBndr)
 simplBinderT !env bndr
-  | isTyVar bndr  = do  { (env', tv) <- substTyVarBndrT env bndr
+  | isTyVar bndr  = do  { (!env', tv) <- substTyVarBndrT env bndr
                         ; seqTyVar tv `seq` return (env', tv) }
-  | otherwise     = do  { (env', id) <- substIdBndrT env bndr
+  | otherwise     = do  { (!env', id) <- substIdBndrT env bndr
                         ; seqId id `seq` return (env', id) }
 
 ---------------
@@ -855,7 +855,7 @@ simplNonRecBndr :: SimplEnv -> InBndr -> SimplM (SimplEnv, OutBndr)
 -- A non-recursive let binder
 simplNonRecBndr !env id
   -- See Note [Bangs in the Simplifier]
-  = do  { let (!env1, id1) = substIdBndr env id
+  = do  { let !(!env1, id1) = substIdBndr env id
         ; seqId id1 `seq` return (env1, id1) }
 
 ---------------
@@ -1136,12 +1136,12 @@ substTyVar env tv = Type.substTyVar (getTCvSubst env) tv
 substTyVarBndr :: SimplEnv -> TyVar -> (SimplEnv, TyVar)
 substTyVarBndr env tv
   = case Type.substTyVarBndr (getTCvSubst env) tv of
-        (TCvSubst in_scope' tv_env' cv_env', tv')
+        (TCvSubst !in_scope' !tv_env' !cv_env', !tv')
            -> (env { seInScope = in_scope', seTvSubst = tv_env', seCvSubst = cv_env' }, tv')
 
 substTyVarBndrT :: TSimplEnv s -> TyVar -> ST s (TSimplEnv s, TyVar)
 substTyVarBndrT env tv = do
-  (TTCvSubst in_scope' tv_env' cv_env', tv') <- Type.substTyVarBndrT (getTTCvSubst env) tv
+  (TTCvSubst !in_scope' !tv_env' !cv_env', !tv') <- Type.substTyVarBndrT (getTTCvSubst env) tv
   return (env { tseInScope = in_scope', tseTvSubst = tv_env', tseCvSubst = cv_env' }, tv')
 
 substCoVar :: SimplEnv -> CoVar -> Coercion
@@ -1150,12 +1150,12 @@ substCoVar env tv = Coercion.substCoVar (getTCvSubst env) tv
 substCoVarBndr :: SimplEnv -> CoVar -> (SimplEnv, CoVar)
 substCoVarBndr env cv
   = case Coercion.substCoVarBndr (getTCvSubst env) cv of
-        (TCvSubst in_scope' tv_env' cv_env', cv')
+        (TCvSubst !in_scope' !tv_env' !cv_env', !cv')
            -> (env { seInScope = in_scope', seTvSubst = tv_env', seCvSubst = cv_env' }, cv')
 
 substCoVarBndrT :: TSimplEnv s -> CoVar -> ST s (TSimplEnv s, CoVar)
 substCoVarBndrT env cv = do
-  (TTCvSubst in_scope' tv_env' cv_env', cv') <- Coercion.substCoVarBndrT (getTTCvSubst env) cv
+  (TTCvSubst !in_scope' !tv_env' !cv_env', !cv') <- Coercion.substCoVarBndrT (getTTCvSubst env) cv
   return (env { tseInScope = in_scope', tseTvSubst = tv_env', tseCvSubst = cv_env' }, cv')
 
 substCo :: SimplEnv -> Coercion -> Coercion
