@@ -357,15 +357,6 @@ instance Outputable Subst where
 ************************************************************************
 -}
 
--- | A persistent-on-write 'TSubst'.
-data PowSubst s = Pow OwnershipState (TSubst s)
-
-data OwnershipState = Owned | Borrowed
-
-toMut :: PowSubst s -> ST s (TSubst s)
-toMut (Pow Owned subst) = return subst
-toMut (Pow Borrowed subst) = transientSubst <$> persistentSubst subst
-
 substExprSC :: HasDebugCallStack => Subst -> CoreExpr -> CoreExpr
 -- Just like substExpr, but a no-op if the substitution is empty
 -- Note that this does /not/ replace occurrences of free vars with
@@ -383,29 +374,29 @@ substExprSC subst orig_expr
 -- See Note [Extending the Subst]
 substExpr :: HasDebugCallStack => Subst -> CoreExpr -> CoreExpr
    -- HasDebugCallStack so we can track failures in lookupIdSubst
-substExpr subst expr = runST $ substExprT (Pow Owned (transientSubst subst)) expr
+substExpr subst expr = runST $ substExprT (transientSubst subst) True expr
 
-substExprT :: HasDebugCallStack => PowSubst s -> CoreExpr -> ST s CoreExpr
-substExprT pow_subst@(Pow _ read_only_subst) expr
+substExprT :: HasDebugCallStack => TSubst s -> Bool -> CoreExpr -> ST s CoreExpr
+substExprT subst owned expr
   = go expr
   where
-    go (Var v)       = lookupIdSubstT read_only_subst v
-    go (Type ty)     = Type <$> (substTyT read_only_subst ty)
+    go (Var v)       = lookupIdSubstT subst v
+    go (Type ty)     = Type <$> (substTyT subst ty)
     go (Lit lit)     = return $ Lit lit
-    go (Coercion co) = Coercion <$> (substCoT read_only_subst co)
+    go (Coercion co) = Coercion <$> (substCoT subst co)
 
     go (App fun arg) = do
-      arg' <- substExprT (Pow Borrowed read_only_subst) arg
+      arg' <- substExprT subst False arg
       fun' <- go fun
       return $ App fun' arg'
 
     go (Tick tickish e) = do
-      t <- substTickishT read_only_subst tickish
+      t <- substTickishT subst tickish
       e' <- go e
       return $ mkTick t e'
 
     go (Cast e co) = do
-      co' <- substCoT read_only_subst co
+      co' <- substCoT subst co
       e' <- go e
       return $ Cast e' co'
        -- Do not optimise even identity coercions
@@ -415,32 +406,32 @@ substExprT pow_subst@(Pow _ read_only_subst) expr
        --         construction time
 
     go (Lam bndr body) = do
-      subst' <- toMut pow_subst
-      (subst'', bndr') <- substBndrT subst' bndr
-      body' <- substExprT (Pow Owned subst'') body
+      owned_subst <- toOwned subst
+      (subst', bndr') <- substBndrT owned_subst bndr
+      body' <- substExprT subst' True body
       return $ Lam bndr' body'
 
     go (Let bind body) = do
-      persistent_subst <- persistentSubst read_only_subst
+      persistent_subst <- persistentSubst subst
       let (subst', bind') = substBind persistent_subst bind
-      body' <- substExprT (Pow Owned (transientSubst subst')) body
+      body' <- substExprT (transientSubst subst') True body
       return $ Let bind' body'
 
     go (Case scrut bndr ty [alt]) = do
-      scrut' <- substExprT (Pow Borrowed read_only_subst) scrut
-      ty' <- substTyT read_only_subst ty
+      scrut' <- substExprT subst False scrut
+      ty' <- substTyT subst ty
 
-      subst' <- toMut pow_subst
+      subst' <- toOwned subst
       (subst'', bndr') <- substBndrT subst' bndr
 
       alt' <- go_alt_t subst'' alt
       return $ Case scrut' bndr' ty' [alt']
 
     go (Case scrut bndr ty alts) = do
-      scrut' <- substExprT (Pow Borrowed read_only_subst) scrut
-      ty' <- substTyT read_only_subst ty
+      scrut' <- substExprT subst False scrut
+      ty' <- substTyT subst ty
 
-      subst' <- toMut pow_subst
+      subst' <- toOwned subst
       (subst'', bndr') <- substBndrT subst' bndr
 
       persistent_subst <- persistentSubst subst''
@@ -449,13 +440,17 @@ substExprT pow_subst@(Pow _ read_only_subst) expr
 
     go_alt subst (Alt con bndrs rhs) = do
       (subst', bndrs') <- substBndrsT (transientSubst subst) bndrs
-      rhs' <- substExprT (Pow Owned subst') rhs
+      rhs' <- substExprT subst' True rhs
       return $ Alt con bndrs' rhs'
 
     go_alt_t subst (Alt con bndrs rhs) = do
       (subst', bndrs') <- substBndrsT subst bndrs
-      rhs' <- substExprT (Pow Owned subst') rhs
+      rhs' <- substExprT subst' True rhs
       return $ Alt con bndrs' rhs'
+
+    toOwned subst
+      | owned = return subst
+      | otherwise = transientSubst <$> persistentSubst subst
 
 -- | Apply a substitution to an entire 'CoreBind', additionally returning an updated 'Subst'
 -- that should be used by subsequent substitutions.
